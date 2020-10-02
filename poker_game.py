@@ -1,12 +1,17 @@
-import random
 import itertools as it
+import pprint
+import random
+
+import pandas as pd
+
+card_deck = [(suit, number) for suit, number in it.product(['C', 'D', 'H', 'S'], range(2, 15))]
 
 
 def poker_dealer(number_of_samples):
     """
     Returns number_of_samples many conditions samples, which in the poker game means number_of_samples many card samples.
-    :param number_of_samples:
-    :return: a list of number_of_samples card samples.
+    :param number_of_samples: how many sample cards from the dealer deck. 
+    :return: a list with number_of_samples many card sampled from the dealer's deck.
     """
     return [random.sample(card_deck, 1)[0] for _ in range(0, number_of_samples)]
 
@@ -22,38 +27,36 @@ def poker_player_utility(player, strategy_profile, condition):
     u = []
     u_squared = []
     winner_point = 1
+
+    player_hand = strategy_profile[0] if player == 1 else strategy_profile[1]
+    opponent_hand = strategy_profile[1] if player == 1 else strategy_profile[0]
+
     for dealer_card in condition:
-        player_1_hand = sorted(strategy_profile[0] + (dealer_card,), key=lambda x: x[1])
-        player_2_hand = sorted(strategy_profile[1] + (dealer_card,), key=lambda x: x[1])
-        player_1_hand_rank = hand_rank(player_1_hand)
-        player_2_hand_rank = hand_rank(player_2_hand)
-        if player_1_hand_rank == player_2_hand_rank:
+        player_hand_rank = hand_rank(sorted(player_hand + (dealer_card,), key=lambda x: x[1]))
+        oppone_hand_rank = hand_rank(sorted(opponent_hand + (dealer_card,), key=lambda x: x[1]))
+        if player_hand_rank == oppone_hand_rank:
             u.append(0)
             u_squared.append(0)
-        elif player == 1:
-            if player_1_hand_rank > player_2_hand_rank:
-                u.append(winner_point)
-                u_squared.append(winner_point * winner_point)
-            else:
-                u.append(-winner_point)
-                u_squared.append(-winner_point * -winner_point)
+        elif player_hand_rank < oppone_hand_rank:
+            u.append(winner_point)
+            u_squared.append(winner_point * winner_point)
         else:
-            if player_2_hand_rank > player_1_hand_rank:
-                u.append(winner_point)
-                u_squared.append(winner_point)
-            else:
-                u.append(-winner_point)
-                u_squared.append(-winner_point * -winner_point)
+            u.append(-winner_point)
+            u_squared.append(-winner_point * -winner_point)
 
     return len(condition), sum(u), sum(u_squared)
 
 
 def hand_rank(hand):
     """
+    Computes the rank of a hand, a number between 1 and 9, where lower numbers indicate better hands.
     Assumes the hand is given in ascending order of number.
-    :param hand:
-    :return:
+    :param hand: a tuple with 5 tuples, each inner tuple representing a card from a standard deck.
+    :return: the rank of the hand, a number between 1 and 9, where lower numbers indicate better hands.
     """
+    # A hand must consist of 5 cards.
+    assert len(hand) == 5
+
     # Straight flush.
     if all(hand[0][0] == card[0] for card in hand) and all(hand[i + 1][1] - hand[i][1] == 1 for i in [0, 1, 2, 3]):
         return 1
@@ -75,7 +78,9 @@ def hand_rank(hand):
         return 5
 
     # Three of a king
-    elif all(hand[0][1] == hand[i][1] for i in [1, 2]) or all(hand[2][1] == hand[i][1] for i in [3, 4]):
+    elif all(hand[0][1] == hand[i][1] for i in [1, 2]) or \
+            all(hand[1][1] == hand[i][1] for i in [2, 3]) or \
+            all(hand[2][1] == hand[i][1] for i in [3, 4]):
         return 6
 
     # Tow pair
@@ -92,21 +97,90 @@ def hand_rank(hand):
     return 9
 
 
-def get_initial_game():
+def expected_utility(player, strategy_profile):
     """
-    Draw a random hand for player 1, a random hand for player 2, and construct the active set. 
+    Given a player and a strategy profile, returns the player's expected utility for that strategy profile.  
+    :param player: an integer in {1, 2}
+    :param strategy_profile: a tuple of two 4-hands. 
+    :return: the player's expected utility for that strategy profile.
+    """
+    # Make sure the input is right. 
+    assert player == 1 or player == 2
+    assert len(strategy_profile) == 2 and len(strategy_profile[0]) == 4 and len(strategy_profile[1]) == 4
+
+    players_hand = strategy_profile[0] if player == 1 else strategy_profile[1]
+    opponent_hand = strategy_profile[1] if player == 1 else strategy_profile[0]
+    prob = 0
+    # For each possible card of the dealer.
+    for dealer_card in card_deck:
+        player_complete_hand = sorted(players_hand + (dealer_card,), key=lambda x: x[1])
+        opponent_complete_hand = sorted(opponent_hand + (dealer_card,), key=lambda x: x[1])
+        player_hand_rank = hand_rank(player_complete_hand)
+        opponent_hand_rank = hand_rank(opponent_complete_hand)
+        if player_hand_rank == opponent_hand_rank:
+            prob += 0
+        elif player_hand_rank < opponent_hand_rank:
+            prob += 1 / 52
+        else:
+            prob += -1 / 52
+    return prob
+
+
+def variance_utility(player, strategy_profile):
+    """
+    
+    :param player: 
+    :param strategy_profile: 
     :return: 
     """
-    p1_hand = sorted(random.sample(card_deck, 5), key=lambda x: x[1])
-    p2_hand = sorted(random.sample([card for card in card_deck if card not in p1_hand], 5), key=lambda x: x[1])
-    # p1_hand = (('D', 1), ('D', 2), ('D', 3), ('D', 4), ('D', 5))
-    # p2_hand = (('C', 1), ('C', 1), ('H', 3), ('H', 4), ('C', 5))
-    print(f"p1_hand = {p1_hand}, rank = {hand_rank(p1_hand)}")
-    print(f"p2_hand = {p2_hand}, rank = {hand_rank(p2_hand)}")
+    players_hand = strategy_profile[0] if player == 1 else strategy_profile[1]
+    opponent_hand = strategy_profile[1] if player == 1 else strategy_profile[0]
+    expectation = expected_utility(player, strategy_profile)
+    acum = 0
+    # For each possible card of the dealer.
+    for dealer_card in card_deck:
+        player_complete_hand = sorted(players_hand + (dealer_card,), key=lambda x: x[1])
+        opponent_complete_hand = sorted(opponent_hand + (dealer_card,), key=lambda x: x[1])
+        player_hand_rank = hand_rank(player_complete_hand)
+        opponent_hand_rank = hand_rank(opponent_complete_hand)
+        if player_hand_rank == opponent_hand_rank:
+            acum += (0 - expectation) * (0 - expectation) * (1 / 52)
+        elif player_hand_rank < opponent_hand_rank:
+            acum += (1 - expectation) * (1 - expectation) * (1 / 52)
+        else:
+            acum += (-1 - expectation) * (-1 - expectation) * (1 / 52)
+    return acum
 
-    return {(p, (s1, s2)) for p, s1, s2 in it.product([1, 2], it.combinations(p1_hand, 4), it.combinations(p2_hand, 4))}
+
+def draw_game(size_hand=5, p1_initial_hand=None, p2_initial_hand=None):
+    """
+    :param size_hand:
+    :param p1_initial_hand:
+    :param p2_initial_hand:
+    Draw a random hand for player 1, a random hand for player 2, and construct the active set. 
+    :return: a tuple (p1_hand, p2_hand, game) where game is a set of tuples (player, p1_chosen_4_hand, p2_chosen_4_hand)
+    """
+    p1_poker_hand = tuple(sorted(random.sample(card_deck, size_hand), key=lambda x: x[1])) if p1_initial_hand is None else p1_initial_hand
+    p2_poker_hand = tuple(sorted(random.sample([card for card in card_deck if card not in p1_poker_hand], size_hand), key=lambda x: x[1])) if p2_initial_hand is None else p2_initial_hand
+
+    return p1_poker_hand, p2_poker_hand, {(p, (s1, s2)) for p, s1, s2 in it.product([1, 2], it.combinations(p1_poker_hand, 4), it.combinations(p2_poker_hand, 4))}
 
 
-# Initially, all (player, strategy_profile) pairs are active.
-card_deck = [(suit, number) for suit, number in it.product(['C', 'D', 'H', 'S'], range(2, 15))]
-# pprint.pprint(card_deck)
+def compute_game_stats(game):
+    """
+    Compute statistics of a game. A game is a set of tuples (player, (strategy_p1, strategy_p2)). 
+    :param game:
+    :return: a pair 
+    """
+    statistics = {}
+    for profile in game:
+        if profile[1] not in statistics:
+            statistics[profile[1]] = {'expected_utility_p1': expected_utility(1, profile[1]),
+                                      'expected_utility_p2': expected_utility(2, profile[1]),
+                                      'variance_utility_p1': variance_utility(1, profile[1]),
+                                      'variance_utility_p2': variance_utility(2, profile[1])
+                                      }
+
+    max_variance = max([max(statistics[profile[1]]['variance_utility_p1'], statistics[profile[1]]['variance_utility_p2']) for profile in game])
+    sum_variance = sum([sum([statistics[profile[1]]['variance_utility_p1'], statistics[profile[1]]['variance_utility_p2']]) for profile in game])
+    return max_variance, sum_variance, statistics
